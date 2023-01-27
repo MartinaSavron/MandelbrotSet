@@ -1,6 +1,7 @@
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.*;
+import java.awt.image.BufferedImage;
 
 public class MandelbrotExplorer extends JFrame {
 
@@ -9,13 +10,17 @@ public class MandelbrotExplorer extends JFrame {
     // In mathematics this process is most often the application of a mathematical function
     private static final int ITER = 250;//Iteracije in detaljnost
 
-    private static final double ZOOM_SENSITYVITY = 2;
+    private static final double ZOOM_SENSITYVITY = 1;
 
     //Koordinatni
     private double rStart = -5;
     private double iStart = -5;
     private double rEnd = 5;
     private double iEnd = 5;
+
+    //Kvaliteta:
+    private boolean HQ = false; //-> Ob premiku prerišem lez obstoječo sliko
+    private  JPanel panel;
 
 //____________________________________________________________________________________________-
     class MandelbrotPanel extends JPanel{
@@ -58,7 +63,8 @@ public class MandelbrotExplorer extends JFrame {
 
                     lastMouseX = e.getX();
                     lastMouseY = e.getY();
-                    repaint();
+                    interrupt = true;
+                    HQimpact();
 
                 }
 
@@ -102,19 +108,21 @@ public class MandelbrotExplorer extends JFrame {
                 iStart -= ioffsetE - ioffsetS;
                 iEnd -= ioffsetE - ioffsetS;
 
-                repaint();
+                interrupt = true;
+                HQimpact();
             });
         }
 
         public void paint(Graphics g) {
-            drawMandelbrotSet(this, g);
+            if(picture != null){
+                g.drawImage(picture,0,0,picture.getWidth(),picture.getHeight(),0,0,panel.getWidth(), panel.getHeight(), null);
+            }
         }
-
     }
 
 //______________________________________________________________________________
     public MandelbrotExplorer() {
-        this.setSize(1200, 1000); //Dimenzija okna
+        this.setSize(800, 600); //Dimenzija okna
         this.setLocation(0,0); //Pojavi na sredini
         this.setVisible(true);
         this.addWindowListener(new WindowAdapter() {
@@ -122,19 +130,32 @@ public class MandelbrotExplorer extends JFrame {
                 System.exit(0);
             }
         });
-        this.add(new MandelbrotPanel());
+        panel = new MandelbrotPanel();
+        this.add(panel);
     }
 
     public static void main(String[] args) {
         new MandelbrotExplorer();
     }
 //_____________________________________________________________________________
-    //Risanje pixlow
-    public void drawMandelbrotSet(JPanel panel, Graphics g){
-        Color b;
+    private BufferedImage picture;
 
-        int nImageWidth = panel.getWidth(); //Ločljivost ter odzivnost*
-        int nImageHeight = panel.getHeight();
+    boolean interrupt = false; //-> če je interrupt nastavljen medtem ko riše lowquality sliko al obratnno bo izvajanje  prekinil izven zanke
+
+    //Risanje pixlow
+    public void drawMandelbrotSet(){
+
+        BufferedImage picture = new BufferedImage(panel.getWidth(), panel.getHeight(), BufferedImage.TYPE_INT_RGB);
+        Graphics g = picture.getGraphics();
+
+        interrupt = false;
+
+        Color b;
+        int nImageWidth =  HQ ? panel.getWidth() : 100; //-> če je visoka kakovost, naj bo ločljivost zaslona polna ločljivost zaslona
+        int nImageHeight = HQ ? panel.getHeight() : 100;//Če pa ni zmanjšaja , 100:100
+        // int nImageWidth = panel.getWidth(); //Ločljivost ter odzivnost*
+        // int nImageHeight = panel.getHeight();
+
 
         double pixelSizeX = (double)panel.getWidth()/nImageWidth;
         double pixelSizeY = (double)panel.getHeight()/nImageHeight;
@@ -142,8 +163,8 @@ public class MandelbrotExplorer extends JFrame {
         double rStep = (rEnd-rStart)/nImageWidth;
         double iStep = (iEnd-iStart)/nImageHeight;
 
-        for (int x = 0; x < nImageWidth; x++) {
-            for (int y = 0; y < nImageHeight; y++) {
+        for (int x = 0; x < nImageWidth && (HQ || !interrupt); x++) {
+            for (int y = 0; y < nImageHeight && (HQ || !interrupt); y++) {
                 b = null;
                 double r = 0;
                 double i = 0;
@@ -168,10 +189,29 @@ public class MandelbrotExplorer extends JFrame {
                 }
                 g.setColor(b);
                 g.fillRect((int)(x*pixelSizeX), (int)(y*pixelSizeY),(int)pixelSizeX+1, (int)pixelSizeY+1);
-
             }
-
         }
+        this.picture = picture;
+        repaint();
+
+    }
+
+    private void  HQimpact(){ //Po računanju kvalitete, skoči na nov set
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                interrupt = true;
+                HQ = false;  //izklop HQ
+                drawMandelbrotSet();  //Grda slika, slabša rezolucija
+
+                HQ = true;
+                drawMandelbrotSet(); //Lih obratno, polna rezolucija
+                //Ubistvu jo prvo izklopi, da ostane na istem mestu, potem vklopi in je bolša slika
+                /*while (HQ < 3){
+                    HQ++;
+                }*/
+            }
+        }).start();
 
     }
 
